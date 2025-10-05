@@ -58,7 +58,7 @@ kubectl get nodes -o wide
                   ↓
 ┌─────────────────────────────────────────┐
 │      Apache + PHP 8.2 Deployment        │
-│         Container Port: 80               │
+│         Container Port: 80              │
 └─────────────────┬───────────────────────┘
                   │
                   │ Connects to
@@ -71,7 +71,7 @@ kubectl get nodes -o wide
                   ↓
 ┌─────────────────────────────────────────┐
 │        MySQL 8.0 Deployment             │
-│         Container Port: 3306             │
+│         Container Port: 3306            │
 │                                         │
 │  Database: mydb                         │
 │  User: user / userpassword              │
