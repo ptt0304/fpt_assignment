@@ -1,630 +1,686 @@
-# CloudNativePG (CNPG) Helm Chart
+# LAMP Stack Helm Chart
 
-A production-ready Helm chart for deploying PostgreSQL clusters using CloudNativePG operator on Kubernetes.
+A simple yet powerful Helm chart for deploying a complete LAMP (Linux, Apache, MySQL, PHP) stack on Kubernetes.
 
 ## Overview
 
-This Helm chart simplifies the deployment of highly available PostgreSQL clusters managed by the CloudNativePG operator. It provides automated failover, backup/recovery capabilities, and enterprise-grade PostgreSQL management on Kubernetes.
+This Helm chart provides a quick and easy way to deploy a traditional LAMP stack in Kubernetes. It includes Apache with PHP 8.2 and MySQL 8.0, making it perfect for running PHP applications, WordPress sites, or any PHP-based web applications.
 
 ## Features
 
-- ✅ CloudNativePG operator-based PostgreSQL cluster management
-- ✅ High availability with automatic failover
-- ✅ Persistent storage with configurable storage classes
-- ✅ Optimized PostgreSQL parameters for production workloads
-- ✅ Built-in security with superuser and application user management
-- ✅ Host-based authentication (pg_hba) configuration
-- ✅ Post-initialization SQL script support
-- ✅ Rolling updates with configurable strategies
-- ✅ PostgreSQL 15.x support
+- ✅ **Apache with PHP 8.2** - Modern PHP version with Apache web server
+- ✅ **MySQL 8.0** - Latest stable MySQL database
+- ✅ **Simple Configuration** - Easy-to-use values for quick deployment
+- ✅ **NodePort Access** - Direct external access to Apache (configurable)
+- ✅ **Environment Variables** - MySQL configuration through environment variables
+- ✅ **Kubernetes Native** - Uses standard Deployments and Services
 
 ## Prerequisites
 
-- Kubernetes 1.23+
+- Kubernetes 1.19+
 - Helm 3.0+
-- **CloudNativePG Operator installed** (Required!)
-- PersistentVolume provisioner support
-- StorageClass configured (default: Longhorn)
+- kubectl configured to access your cluster
 
-## Installing CloudNativePG Operator
+## Quick Start
 
-Before deploying this chart, you must install the CloudNativePG operator:
+### Install the Chart
 
 ```bash
-# Install the operator
-kubectl apply -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.0.yaml
-
-# Verify the operator is running
-kubectl get deployment -n cnpg-system cnpg-controller-manager
+helm install my-lamp ./lamp
 ```
 
-Or using Helm:
+### Access Your Application
 
-```bash
-helm repo add cnpg https://cloudnative-pg.github.io/charts
-helm upgrade --install cnpg \
-  --namespace cnpg-system \
-  --create-namespace \
-  cnpg/cloudnative-pg
+If using NodePort (default), access Apache at:
+```
+http://<node-ip>:32100
 ```
 
-## Installation
-
-### Basic Installation
-
+Find your node IP:
 ```bash
-# Create namespace
-kubectl create namespace pg
-
-# Install the chart
-helm install my-postgres ./postgres-cnpg
+kubectl get nodes -o wide
 ```
 
-### Install with Custom Values
+## Architecture
 
-```bash
-helm install my-postgres ./postgres-cnpg -f custom-values.yaml
 ```
-
-### Install in Existing Namespace
-
-```bash
-helm install my-postgres ./postgres-cnpg \
-  --set cluster.namespace=database \
-  --create-namespace
+┌─────────────────────────────────────────┐
+│           External Access               │
+│        http://<node-ip>:32100           │
+└─────────────────┬───────────────────────┘
+                  │
+                  ↓
+┌─────────────────────────────────────────┐
+│      Apache Service (NodePort)          │
+│            Port: 80                     │
+└─────────────────┬───────────────────────┘
+                  │
+                  ↓
+┌─────────────────────────────────────────┐
+│      Apache + PHP 8.2 Deployment        │
+│         Container Port: 80               │
+└─────────────────┬───────────────────────┘
+                  │
+                  │ Connects to
+                  ↓
+┌─────────────────────────────────────────┐
+│      MySQL Service (ClusterIP)          │
+│            Port: 3306                   │
+└─────────────────┬───────────────────────┘
+                  │
+                  ↓
+┌─────────────────────────────────────────┐
+│        MySQL 8.0 Deployment             │
+│         Container Port: 3306             │
+│                                         │
+│  Database: mydb                         │
+│  User: user / userpassword              │
+│  Root: root / rootpassword              │
+└─────────────────────────────────────────┘
 ```
 
 ## Configuration
 
-### Cluster Parameters
+### MySQL Parameters
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `cluster.name` | Name of the PostgreSQL cluster | `my-pgsql-cluster` |
-| `cluster.namespace` | Namespace for the cluster | `pg` |
-| `cluster.description` | Cluster description | `My example pg cluster` |
-| `cluster.image` | PostgreSQL container image | `ghcr.io/cloudnative-pg/postgresql:15.1` |
-| `cluster.instances` | Number of PostgreSQL instances | `2` |
+| `mysql.image` | MySQL container image | `mysql:8.0` |
+| `mysql.rootPassword` | MySQL root password | `rootpassword` |
+| `mysql.database` | Initial database name | `mydb` |
+| `mysql.user` | MySQL user | `user` |
+| `mysql.password` | MySQL user password | `userpassword` |
+| `mysql.service.port` | MySQL service port | `3306` |
 
-### Authentication Parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `cluster.superuserSecretName` | Name of superuser secret | `pg-superuser` |
-| `cluster.enableSuperuserAccess` | Enable superuser access | `true` |
-
-> **Security Warning:** Change default passwords in `secrets.yaml` before production deployment!
-
-### Lifecycle Parameters
+### Apache/PHP Parameters
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `cluster.startDelay` | Delay before starting (seconds) | `30` |
-| `cluster.stopDelay` | Delay before stopping (seconds) | `100` |
-| `cluster.primaryUpdateStrategy` | Update strategy for primary | `unsupervised` |
-
-### PostgreSQL Configuration
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `cluster.postgresql.parameters.max_connections` | Maximum number of connections | `200` |
-| `cluster.postgresql.parameters.shared_buffers` | Shared memory buffers | `256MB` |
-| `cluster.postgresql.parameters.effective_cache_size` | Effective cache size | `768MB` |
-| `cluster.postgresql.parameters.maintenance_work_mem` | Maintenance work memory | `64MB` |
-| `cluster.postgresql.parameters.work_mem` | Work memory per operation | `655kB` |
-| `cluster.postgresql.parameters.max_wal_size` | Maximum WAL size | `4GB` |
-| `cluster.postgresql.pg_hba` | Host-based authentication rules | `[host all all 10.240.0.0/16 scram-sha-256]` |
-
-### Bootstrap Configuration
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `cluster.bootstrap.initdb.database` | Initial database name | `my_app_db` |
-| `cluster.bootstrap.initdb.owner` | Database owner | `app_user` |
-| `cluster.bootstrap.initdb.secretName` | Secret for app user credentials | `pg-app-user` |
-| `cluster.bootstrap.initdb.postInitApplicationSQL` | SQL scripts to run after init | `[create schema my_app]` |
-
-### Storage Parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `cluster.storage.size` | Storage size per instance | `1Gi` |
-| `cluster.storage.storageClass` | StorageClass name | `longhorn` |
-
-## Default Credentials
-
-The chart creates two secrets with default credentials:
-
-### Superuser (postgres)
-- **Username:** `postgres`
-- **Password:** `superuser-password`
-- **Secret Name:** `pg-superuser`
-
-### Application User
-- **Username:** `app_user`
-- **Password:** `app-user-password`
-- **Secret Name:** `pg-app-user`
-
-> **⚠️ CRITICAL:** These are example credentials. You MUST change them before deploying to production!
+| `apache.image` | PHP with Apache image | `php:8.2-apache` |
+| `apache.service.type` | Kubernetes service type | `NodePort` |
+| `apache.service.port` | Apache service port | `80` |
+| `apache.service.nodePort` | NodePort for external access | `32100` |
 
 ## Usage Examples
 
-### Production Cluster with 3 Replicas
+### Basic Installation
 
 ```bash
-helm install prod-postgres ./postgres-cnpg \
-  --set cluster.name=prod-pgsql \
-  --set cluster.instances=3 \
-  --set cluster.storage.size=50Gi \
-  --set cluster.postgresql.parameters.shared_buffers=2GB \
-  --set cluster.postgresql.parameters.effective_cache_size=6GB
+helm install lamp-stack ./lamp
 ```
 
-### Development Cluster
+### Custom MySQL Credentials
 
 ```bash
-helm install dev-postgres ./postgres-cnpg \
-  --set cluster.name=dev-pgsql \
-  --set cluster.instances=1 \
-  --set cluster.storage.size=5Gi
+helm install lamp-stack ./lamp \
+  --set mysql.rootPassword=MySecureRootPass123 \
+  --set mysql.password=MySecureUserPass123 \
+  --set mysql.database=myapp_db \
+  --set mysql.user=myapp_user
 ```
 
-### Custom Database and Schema
+### Using LoadBalancer Instead of NodePort
 
 ```bash
-helm install app-postgres ./postgres-cnpg \
-  --set cluster.bootstrap.initdb.database=myapp_db \
-  --set cluster.bootstrap.initdb.owner=myapp_user \
-  --set cluster.bootstrap.initdb.postInitApplicationSQL[0]="create schema myapp"
+helm install lamp-stack ./lamp \
+  --set apache.service.type=LoadBalancer
 ```
 
-## Accessing PostgreSQL
-
-### Get Connection Information
+### Using ClusterIP with Ingress
 
 ```bash
-# Get the cluster status
-kubectl get cluster -n pg
-
-# Get the service endpoints
-kubectl get svc -n pg
+helm install lamp-stack ./lamp \
+  --set apache.service.type=ClusterIP
 ```
 
-### Connect from Within Kubernetes
+Then create an Ingress resource separately.
 
-The cluster creates several services:
+### Custom PHP Version
 
-- **Primary service (read-write):** `<cluster-name>-rw`
-- **Replica service (read-only):** `<cluster-name>-ro`
-- **Any instance service:** `<cluster-name>-r`
-
-Connection string example:
+```bash
+helm install lamp-stack ./lamp \
+  --set apache.image=php:8.1-apache
 ```
-postgresql://app_user:app-user-password@my-pgsql-cluster-rw.pg.svc.cluster.local:5432/my_app_db
+
+### Custom MySQL Version
+
+```bash
+helm install lamp-stack ./lamp \
+  --set mysql.image=mysql:5.7
+```
+
+## Connecting to MySQL
+
+### From Apache/PHP Container
+
+Use the following connection parameters in your PHP application:
+
+```php
+<?php
+$servername = "mysql";  // Service name
+$username = "user";     // From values.yaml
+$password = "userpassword";  // From values.yaml
+$database = "mydb";     // From values.yaml
+
+$conn = new mysqli($servername, $username, $password, $database);
+
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+echo "Connected successfully";
+?>
+```
+
+### Connection String
+
+```
+mysql://user:userpassword@mysql:3306/mydb
+```
+
+### From kubectl
+
+```bash
+# Get MySQL pod name
+kubectl get pods -l app=mysql
+
+# Connect to MySQL
+kubectl exec -it <mysql-pod-name> -- mysql -uroot -prootpassword
+
+# Or connect as regular user
+kubectl exec -it <mysql-pod-name> -- mysql -uuser -puserpassword mydb
 ```
 
 ### Port Forward for Local Access
 
 ```bash
-kubectl port-forward -n pg svc/my-pgsql-cluster-rw 5432:5432
+kubectl port-forward svc/mysql 3306:3306
 ```
 
-Then connect using:
+Then connect from your local machine:
 ```bash
-psql -h localhost -U app_user -d my_app_db
+mysql -h 127.0.0.1 -u user -puserpassword mydb
 ```
 
-### Using psql from a Pod
+## Deploying Your PHP Application
 
+### Method 1: Using Custom Docker Image
+
+Build your own image with your PHP code:
+
+```dockerfile
+FROM php:8.2-apache
+
+# Install MySQL extension
+RUN docker-php-ext-install mysqli pdo pdo_mysql
+
+# Copy your application
+COPY ./src /var/www/html/
+
+# Set permissions
+RUN chown -R www-data:www-data /var/www/html
+```
+
+Then update the chart:
 ```bash
-kubectl run -it --rm psql \
-  --image=postgres:15 \
-  --restart=Never \
-  -n pg \
-  -- psql -h my-pgsql-cluster-rw -U app_user -d my_app_db
+helm upgrade lamp-stack ./lamp \
+  --set apache.image=your-registry/your-php-app:latest
 ```
 
-## Cluster Management
+### Method 2: Using ConfigMap for Simple Apps
 
-### Check Cluster Status
-
-```bash
-kubectl get cluster -n pg
-kubectl describe cluster my-pgsql-cluster -n pg
-```
-
-### View Cluster Pods
-
-```bash
-kubectl get pods -n pg -l cnpg.io/cluster=my-pgsql-cluster
-```
-
-### Check Primary Instance
-
-```bash
-kubectl get cluster my-pgsql-cluster -n pg -o jsonpath='{.status.currentPrimary}'
-```
-
-### View Logs
+Create a ConfigMap with your PHP files:
 
 ```bash
-# View logs of primary instance
-kubectl logs -n pg my-pgsql-cluster-1 -f
-
-# View logs of all instances
-kubectl logs -n pg -l cnpg.io/cluster=my-pgsql-cluster --all-containers=true
+kubectl create configmap php-code \
+  --from-file=index.php=./index.php \
+  --from-file=config.php=./config.php
 ```
 
-## Backup and Recovery
+Update `apache-deployment.yaml` to mount the ConfigMap:
+```yaml
+volumeMounts:
+  - name: php-code
+    mountPath: /var/www/html
+volumes:
+  - name: php-code
+    configMap:
+      name: php-code
+```
 
-CloudNativePG supports automated backups. To configure backups, you need to add backup configuration to the cluster spec:
+### Method 3: Using PersistentVolume
+
+For larger applications, use PersistentVolume to store your code.
+
+## Installing WordPress
+
+### Step 1: Deploy LAMP Stack
+
+```bash
+helm install wordpress ./lamp \
+  --set mysql.database=wordpress \
+  --set mysql.user=wpuser \
+  --set mysql.password=wppassword \
+  --set mysql.rootPassword=wprootpass
+```
+
+### Step 2: Create WordPress Dockerfile
+
+```dockerfile
+FROM php:8.2-apache
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    libpng-dev \
+    libjpeg-dev \
+    libzip-dev \
+    && docker-php-ext-configure gd --with-jpeg \
+    && docker-php-ext-install gd mysqli zip pdo pdo_mysql
+
+# Download WordPress
+RUN curl -O https://wordpress.org/latest.tar.gz \
+    && tar -xzf latest.tar.gz \
+    && mv wordpress/* /var/www/html/ \
+    && rm -rf wordpress latest.tar.gz \
+    && chown -R www-data:www-data /var/www/html
+
+# Enable Apache rewrite module
+RUN a2enmod rewrite
+```
+
+### Step 3: Update Deployment
+
+Build and push your image, then:
+```bash
+helm upgrade wordpress ./lamp \
+  --set apache.image=your-registry/wordpress:latest \
+  --reuse-values
+```
+
+## Common PHP Extensions
+
+The default `php:8.2-apache` image is minimal. You may need to install additional extensions:
+
+```dockerfile
+FROM php:8.2-apache
+
+# Common extensions
+RUN docker-php-ext-install \
+    mysqli \
+    pdo \
+    pdo_mysql \
+    gd \
+    zip \
+    mbstring \
+    bcmath
+
+# Enable Apache modules
+RUN a2enmod rewrite
+```
+
+Popular extensions:
+- `mysqli` - MySQL Improved Extension
+- `pdo_mysql` - PDO MySQL Driver
+- `gd` - Image Processing
+- `zip` - ZIP Archive
+- `mbstring` - Multibyte String
+- `xml` - XML Parser
+- `curl` - cURL
+- `json` - JSON
+- `bcmath` - BC Math
+
+## Persistent Storage for MySQL
+
+⚠️ **Important:** The current configuration does not use persistent storage for MySQL. Data will be lost if the pod restarts!
+
+### Adding PersistentVolume
+
+Update `mysql-deployment.yaml`:
 
 ```yaml
-cluster:
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://my-bucket/backups
-      s3Credentials:
-        accessKeyId:
-          name: aws-credentials
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: aws-credentials
-          key: SECRET_ACCESS_KEY
-      wal:
-        compression: gzip
-    retentionPolicy: "30d"
-```
-
-### Manual Backup
-
-```bash
-kubectl create -f - <<EOF
-apiVersion: postgresql.cnpg.io/v1
-kind: Backup
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: manual-backup-$(date +%Y%m%d-%H%M%S)
-  namespace: pg
+  name: mysql
 spec:
-  cluster:
-    name: my-pgsql-cluster
-EOF
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: {{ .Values.mysql.image }}
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: {{ .Values.mysql.rootPassword | quote }}
+        - name: MYSQL_DATABASE
+          value: {{ .Values.mysql.database | quote }}
+        - name: MYSQL_USER
+          value: {{ .Values.mysql.user | quote }}
+        - name: MYSQL_PASSWORD
+          value: {{ .Values.mysql.password | quote }}
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-data
+        persistentVolumeClaim:
+          claimName: mysql-pvc
 ```
 
-## Scaling
-
-### Scale Up Replicas
-
-```bash
-helm upgrade my-postgres ./postgres-cnpg \
-  --set cluster.instances=3 \
-  --reuse-values
-```
-
-Or directly:
-```bash
-kubectl patch cluster my-pgsql-cluster -n pg \
-  --type='json' -p='[{"op": "replace", "path": "/spec/instances", "value": 3}]'
-```
-
-### Scale Down
-
-```bash
-helm upgrade my-postgres ./postgres-cnpg \
-  --set cluster.instances=1 \
-  --reuse-values
-```
-
-> **Note:** CloudNativePG automatically handles the failover process during scaling operations.
-
-## Monitoring
-
-### Prometheus Integration
-
-CloudNativePG exposes Prometheus metrics by default. To scrape metrics:
-
+Create PVC:
 ```yaml
 apiVersion: v1
-kind: Service
+kind: PersistentVolumeClaim
 metadata:
-  name: my-pgsql-cluster-metrics
-  namespace: pg
-  labels:
-    prometheus: "true"
+  name: mysql-pvc
 spec:
-  type: ClusterIP
-  ports:
-  - name: metrics
-    port: 9187
-    targetPort: 9187
-  selector:
-    cnpg.io/cluster: my-pgsql-cluster
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: longhorn  # Or your StorageClass
 ```
 
-### Key Metrics
+## Monitoring and Logs
 
-- `cnpg_pg_replication_lag` - Replication lag in bytes
-- `cnpg_pg_database_size_bytes` - Database size
-- `cnpg_pg_stat_archiver` - Archive status
-- `cnpg_backends_total` - Number of backends
-
-## Upgrading
-
-### Upgrade PostgreSQL Version
+### View Apache Logs
 
 ```bash
-helm upgrade my-postgres ./postgres-cnpg \
-  --set cluster.image=ghcr.io/cloudnative-pg/postgresql:15.2 \
-  --reuse-values
+# Get pod name
+kubectl get pods -l app=apache
+
+# View logs
+kubectl logs -f <apache-pod-name>
 ```
 
-CloudNativePG performs rolling updates automatically based on the `primaryUpdateStrategy`.
-
-### Upgrade Chart Version
+### View MySQL Logs
 
 ```bash
-helm upgrade my-postgres ./postgres-cnpg -f values.yaml
+# Get pod name
+kubectl get pods -l app=mysql
+
+# View logs
+kubectl logs -f <mysql-pod-name>
 ```
 
-### Rollback
+### Execute Commands in Containers
 
 ```bash
-helm rollback my-postgres
-```
+# Apache container
+kubectl exec -it <apache-pod-name> -- bash
 
-## High Availability Features
-
-### Automatic Failover
-
-CloudNativePG automatically promotes a replica to primary if the primary fails:
-
-- **Failover time:** Typically 30-60 seconds
-- **Zero data loss:** When using synchronous replication
-- **Automatic:** No manual intervention required
-
-### Switchover (Planned Maintenance)
-
-```bash
-kubectl cnpg promote my-pgsql-cluster-2 -n pg
-```
-
-### Connection Pooling
-
-Consider using PgBouncer for connection pooling:
-
-```yaml
-cluster:
-  connectionPooler:
-    enabled: true
-    instances: 2
-    type: pgbouncer
-    pgbouncer:
-      poolMode: transaction
-      parameters:
-        max_client_conn: "1000"
-        default_pool_size: "25"
+# MySQL container
+kubectl exec -it <mysql-pod-name> -- bash
 ```
 
 ## Troubleshooting
 
-### Cluster Not Starting
+### Apache Cannot Connect to MySQL
 
-Check operator logs:
-```bash
-kubectl logs -n cnpg-system deployment/cnpg-controller-manager
-```
+**Symptom:** PHP shows "Connection refused" error
 
-Check cluster events:
-```bash
-kubectl describe cluster my-pgsql-cluster -n pg
-```
+**Solution:** 
+1. Check if MySQL service is running:
+   ```bash
+   kubectl get svc mysql
+   kubectl get pods -l app=mysql
+   ```
 
-### Connection Issues
+2. Verify MySQL is ready:
+   ```bash
+   kubectl logs <mysql-pod-name>
+   ```
 
-Verify services:
-```bash
-kubectl get svc -n pg
-kubectl get endpoints -n pg
-```
+3. Test connection from Apache pod:
+   ```bash
+   kubectl exec -it <apache-pod-name> -- ping mysql
+   ```
 
-Check pg_hba configuration:
-```bash
-kubectl exec -n pg my-pgsql-cluster-1 -- psql -U postgres -c "SELECT * FROM pg_hba_file_rules;"
-```
+### Cannot Access Apache Externally
 
-### Storage Issues
+**Symptom:** Cannot reach http://node-ip:32100
 
-Check PVCs:
-```bash
-kubectl get pvc -n pg
-```
+**Solutions:**
 
-Check storage class:
-```bash
-kubectl get storageclass longhorn
-```
+1. Check if NodePort is open on firewall:
+   ```bash
+   # On node
+   sudo firewall-cmd --add-port=32100/tcp --permanent
+   sudo firewall-cmd --reload
+   ```
 
-### Replication Lag
+2. Verify service:
+   ```bash
+   kubectl get svc apache
+   kubectl describe svc apache
+   ```
 
-Check replication status:
-```bash
-kubectl exec -n pg my-pgsql-cluster-1 -- \
-  psql -U postgres -c "SELECT * FROM pg_stat_replication;"
-```
+3. Check pod status:
+   ```bash
+   kubectl get pods -l app=apache
+   kubectl logs <apache-pod-name>
+   ```
 
-### Pod Crashes
+### MySQL Pod Crashes
 
-View pod logs:
-```bash
-kubectl logs -n pg my-pgsql-cluster-1 --previous
-```
+**Common causes:**
 
-Check resource limits:
-```bash
-kubectl describe pod -n pg my-pgsql-cluster-1
-```
+1. **Insufficient memory** - MySQL needs at least 512MB RAM
+   
+2. **Permission issues** - Check pod events:
+   ```bash
+   kubectl describe pod <mysql-pod-name>
+   ```
 
-## Production Recommendations
+3. **Corrupt data** - If using PersistentVolume, data may be corrupted:
+   ```bash
+   kubectl delete pod <mysql-pod-name>  # Restart pod
+   ```
 
-### Resource Allocation
+### PHP Extensions Missing
 
-```yaml
-cluster:
-  postgresql:
-    parameters:
-      shared_buffers: "2GB"          # 25% of total RAM
-      effective_cache_size: "6GB"     # 75% of total RAM
-      maintenance_work_mem: "512MB"   # RAM / 16
-      work_mem: "20MB"                # RAM / (max_connections * 2)
-      max_wal_size: "4GB"
-```
+**Symptom:** PHP errors about missing functions (mysqli_connect, etc.)
 
-### Security Best Practices
+**Solution:** Build custom image with required extensions (see "Common PHP Extensions" section)
+
+## Security Considerations
+
+### ⚠️ Production Warnings
+
+This chart is designed for development and testing. For production use:
 
 1. **Change Default Passwords:**
    ```bash
-   kubectl create secret generic pg-superuser \
-     -n pg \
-     --from-literal=username=postgres \
+   helm install lamp-stack ./lamp \
+     --set mysql.rootPassword=$(openssl rand -base64 32) \
+     --set mysql.password=$(openssl rand -base64 32)
+   ```
+
+2. **Use Secrets Instead of Values:**
+   Create secrets manually:
+   ```bash
+   kubectl create secret generic mysql-root \
+     --from-literal=password=$(openssl rand -base64 32)
+   
+   kubectl create secret generic mysql-user \
+     --from-literal=username=myuser \
      --from-literal=password=$(openssl rand -base64 32)
    ```
 
-2. **Restrict Network Access:**
-   ```yaml
-   cluster:
-     postgresql:
-       pg_hba:
-         - hostssl all all 10.0.0.0/8 scram-sha-256
-         - hostnossl all all 0.0.0.0/0 reject
-   ```
-
 3. **Enable TLS/SSL:**
+   - Use cert-manager for certificates
+   - Configure Apache for HTTPS
+   - Update service to use port 443
+
+4. **Use Ingress Instead of NodePort:**
    ```yaml
-   cluster:
-     certificates:
-       serverTLSSecret: my-postgres-tls
-       serverCASecret: my-postgres-ca
+   apiVersion: networking.k8s.io/v1
+   kind: Ingress
+   metadata:
+     name: lamp-ingress
+   spec:
+     rules:
+     - host: myapp.example.com
+       http:
+         paths:
+         - path: /
+           pathType: Prefix
+           backend:
+             service:
+               name: apache
+               port:
+                 number: 80
    ```
 
-### Storage Recommendations
+5. **Add Resource Limits:**
+   ```yaml
+   resources:
+     requests:
+       memory: "512Mi"
+       cpu: "250m"
+     limits:
+       memory: "1Gi"
+       cpu: "500m"
+   ```
 
-- **Development:** 5-10Gi
-- **Production:** 50Gi+ with SSD-backed storage
-- **Use StorageClass with good IOPS:** NVMe, SSD, or high-performance cloud storage
-- **Enable volume expansion:** Ensure StorageClass supports expansion
+6. **Enable Network Policies:**
+   Restrict MySQL access to only Apache pods
 
-### High Availability Setup
+7. **Use Persistent Storage:**
+   Always use PersistentVolumes for MySQL data
 
-```yaml
-cluster:
-  instances: 3                          # Minimum for HA
-  minSyncReplicas: 1                    # Synchronous replication
-  maxSyncReplicas: 1
-  postgresql:
-    parameters:
-      synchronous_commit: "on"
-      max_wal_senders: "10"
-      max_replication_slots: "10"
-```
+8. **Regular Backups:**
+   Implement automated MySQL backups
 
-### Monitoring Setup
+## Scaling
 
-1. Enable Prometheus ServiceMonitor
-2. Set up Grafana dashboard (CloudNativePG provides official dashboards)
-3. Configure alerting for:
-   - High replication lag
-   - Low disk space
-   - Connection pool exhaustion
-   - Failed backups
+### Scale Apache
 
-### Backup Strategy
-
-```yaml
-cluster:
-  backup:
-    retentionPolicy: "30d"
-    barmanObjectStore:
-      wal:
-        compression: gzip
-        maxParallel: 8
-      data:
-        compression: gzip
-```
-
-Schedule regular backups:
 ```bash
-# Daily backup at 2 AM
-apiVersion: postgresql.cnpg.io/v1
-kind: ScheduledBackup
-metadata:
-  name: daily-backup
-  namespace: pg
-spec:
-  schedule: "0 2 * * *"
-  cluster:
-    name: my-pgsql-cluster
+# Update apache-deployment.yaml to support scaling
+kubectl scale deployment apache --replicas=3
+```
+
+### MySQL High Availability
+
+For production, consider:
+- MySQL with replication (Master-Slave)
+- Using CloudNativePG for PostgreSQL instead
+- Managed database services (RDS, Cloud SQL)
+
+## Performance Tuning
+
+### MySQL Optimization
+
+Add to `mysql-deployment.yaml` env:
+```yaml
+env:
+  - name: MYSQL_ROOT_PASSWORD
+    value: {{ .Values.mysql.rootPassword | quote }}
+  - name: MYSQL_DATABASE
+    value: {{ .Values.mysql.database | quote }}
+  - name: MYSQL_USER
+    value: {{ .Values.mysql.user | quote }}
+  - name: MYSQL_PASSWORD
+    value: {{ .Values.mysql.password | quote }}
+  # Performance tuning
+  - name: MYSQL_INNODB_BUFFER_POOL_SIZE
+    value: "512M"
+  - name: MYSQL_MAX_CONNECTIONS
+    value: "200"
+```
+
+### Apache/PHP Tuning
+
+Custom Apache configuration via ConfigMap:
+```bash
+kubectl create configmap apache-config \
+  --from-file=apache2.conf
+```
+
+## Upgrading
+
+### Upgrade the Chart
+
+```bash
+helm upgrade lamp-stack ./lamp -f values.yaml
+```
+
+### Upgrade MySQL Version
+
+```bash
+helm upgrade lamp-stack ./lamp \
+  --set mysql.image=mysql:8.1 \
+  --reuse-values
+```
+
+⚠️ **Warning:** Always backup MySQL data before upgrading!
+
+### Rollback
+
+```bash
+helm rollback lamp-stack
 ```
 
 ## Uninstalling
 
-### Remove the Cluster
+### Remove the Chart
 
 ```bash
-helm uninstall my-postgres -n pg
+helm uninstall lamp-stack
 ```
 
-### Clean Up PVCs (Optional)
+### Clean Up Resources
 
 ```bash
-kubectl delete pvc -n pg -l cnpg.io/cluster=my-pgsql-cluster
+# Delete PVCs if created
+kubectl delete pvc mysql-pvc
+
+# Delete ConfigMaps if created
+kubectl delete configmap php-code apache-config
 ```
 
-### Remove Secrets
+## Examples and Templates
 
-```bash
-kubectl delete secret pg-superuser pg-app-user -n pg
+### Example PHP Info Page
+
+Create `index.php`:
+```php
+<?php
+phpinfo();
+?>
 ```
 
-> **Warning:** Deleting PVCs will permanently delete all data!
+### Example MySQL Connection Test
 
-## Architecture
+Create `test-db.php`:
+```php
+<?php
+$servername = "mysql";
+$username = "user";
+$password = "userpassword";
+$database = "mydb";
 
-### Components
+$conn = new mysqli($servername, $username, $password, $database);
 
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+echo "Connected successfully to MySQL!<br>";
+echo "Server version: " . $conn->server_info . "<br>";
+echo "Database: " . $database . "<br>";
+
+$conn->close();
+?>
 ```
-┌─────────────────────────────────────────┐
-│     CloudNativePG Operator              │
-│  (Manages PostgreSQL Cluster Lifecycle) │
-└─────────────────────────────────────────┘
-                    │
-                    ├─ Creates & Manages
-                    ↓
-┌─────────────────────────────────────────┐
-│        PostgreSQL Cluster               │
-│                                         │
-│  ┌──────────┐  ┌──────────┐             │
-│  │ Primary  │  │ Replica  │             │
-│  │  Pod-1   │→ │  Pod-2   │             │
-│  └──────────┘  └──────────┘             │
-│       │             │                   │
-│       ↓             ↓                   │
-│     PVC           PVC                   │
-└─────────────────────────────────────────┘
-                    │
-                    ├─ Services
-                    ↓
-┌─────────────────────────────────────────┐
-│  • -rw (read-write to primary)          │
-│  • -ro (read-only to replicas)          │
-│  • -r  (read to any instance)           │
-└─────────────────────────────────────────┘
-```
-
-### Network Services
-
-- **`<cluster-name>-rw`**: Routes to primary (read-write operations)
-- **`<cluster-name>-ro`**: Routes to replicas (read-only operations)
-- **`<cluster-name>-r`**: Routes to any instance (read operations)
 
 ## Contributing
 
@@ -632,9 +688,11 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Resources
 
-- [CloudNativePG Documentation](https://cloudnative-pg.io/)
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
-- [CloudNativePG GitHub](https://github.com/cloudnative-pg/cloudnative-pg)
+- [PHP Official Documentation](https://www.php.net/docs.php)
+- [MySQL Documentation](https://dev.mysql.com/doc/)
+- [Apache HTTP Server](https://httpd.apache.org/docs/)
+- [PHP Docker Images](https://hub.docker.com/_/php)
+- [MySQL Docker Images](https://hub.docker.com/_/mysql)
 
 ## License
 
@@ -644,12 +702,12 @@ This Helm chart is open source and available under the Apache 2.0 license.
 
 For issues and questions:
 - Create an issue in the GitHub repository
-- Check CloudNativePG documentation
-- Join CloudNativePG Slack community
+- Check the troubleshooting section above
+- Review PHP, MySQL, and Apache documentation
 
 ## Version History
 
-- **0.1.0** - Initial release with PostgreSQL 15.1 support
+- **0.1.0** - Initial release with PHP 8.2 and MySQL 8.0
 
 ## Authors
 
@@ -657,4 +715,4 @@ PHAM THANH TUNG
 
 ---
 
-**Note:** This chart requires the CloudNativePG operator to be installed separately. The operator manages the PostgreSQL cluster lifecycle, automated failover, and backup/recovery operations.
+**Note:** This is a basic LAMP stack suitable for development and testing. For production deployments, implement security hardening, persistent storage, backups, and monitoring solutions.
