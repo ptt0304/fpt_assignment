@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: apache
+spec:
+  type: {{ .Values.apache.service.type }}
+  selector:
+    app: apache
+  ports:
+    - port: {{ .Values.apache.service.port }}
+      targetPort: {{ .Values.apache.service.port }}
+      {{- if eq .Values.apache.service.type "NodePort" }}
+      nodePort: {{ .Values.apache.service.nodePort }}
+      {{- end }}
+

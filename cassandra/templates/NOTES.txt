@@ -1,0 +1,25 @@
+Thank you for installing Cassandra! 🎉
+
+Your release name is: {{ .Release.Name }}
+Your namespace is:    {{ .Release.Namespace }}
+
+---
+
+To connect to your Cassandra cluster:
+
+1. Run a CQL shell inside one of the pods:
+
+   kubectl exec -it statefulset/{{ include "cassandra.fullname" . }} -n {{ .Release.Namespace }} -- cqlsh
+
+2. Or forward the CQL port locally:
+
+   kubectl port-forward svc/{{ include "cassandra.fullname" . }} -n {{ .Release.Namespace }} 9042:9042
+
+   Then connect with your Cassandra client at: 127.0.0.1:9042
+
+---
+
+Check the cluster status:
+
+   kubectl exec -it statefulset/{{ include "cassandra.fullname" . }} -n {{ .Release.Namespace }} -- nodetool status
+

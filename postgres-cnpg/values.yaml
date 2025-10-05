@@ -1,0 +1,45 @@
+cluster:
+  name: my-pgsql-cluster
+  namespace: pg
+  description: "My example pg cluster"
+
+  image: ghcr.io/cloudnative-pg/postgresql:15.1
+  instances: 2
+
+  superuserSecretName: pg-superuser
+  enableSuperuserAccess: true
+
+  startDelay: 30
+  stopDelay: 100
+  primaryUpdateStrategy: unsupervised
+
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "256MB"
+      effective_cache_size: "768MB"
+      maintenance_work_mem: "64MB"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "7864kB"
+      default_statistics_target: "100"
+      random_page_cost: "1.1"
+      effective_io_concurrency: "200"
+      work_mem: "655kB"
+      huge_pages: "off"
+      min_wal_size: "1GB"
+      max_wal_size: "4GB"
+    pg_hba:
+      - host all all 10.240.0.0/16 scram-sha-256
+
+  bootstrap:
+    initdb:
+      database: my_app_db
+      owner: app_user
+      secretName: pg-app-user
+      postInitApplicationSQL:
+        - create schema my_app
+
+  storage:
+    size: 1Gi
+    storageClass: longhorn
+

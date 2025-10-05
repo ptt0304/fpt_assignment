@@ -1,0 +1,16 @@
+mysql:
+  image: mysql:8.0
+  rootPassword: rootpassword
+  database: mydb
+  user: user
+  password: userpassword
+  service:
+    port: 3306
+
+apache:
+  image: php:8.2-apache
+  service:
+    type: NodePort
+    port: 80
+    nodePort: 32100
+
