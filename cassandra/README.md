@@ -292,8 +292,7 @@ For issues and questions:
 
 ## Authors
 
-Your Name / Your Organization
-
+Pham Thanh Tung
 ---
 
 **Note:** This chart uses the official Apache Cassandra Docker image from Docker Hub.
