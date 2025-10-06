@@ -1,6 +1,6 @@
 # Apache Cassandra Helm Chart
 
-A production-ready Helm chart for deploying Apache Cassandra on Kubernetes with StatefulSet support.
+A testing-only Helm chart for deploying Apache Cassandra on Kubernetes with StatefulSet support.
 
 ## Overview
 
